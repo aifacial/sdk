@@ -210,18 +210,118 @@ apenas no primeiro reconhecimento da pessoa diante da câmera.
 
 ## Configuração
 
+Tudo é configurado uma vez, no `AIFacial.init` (Android) ou `AIFacial.initialize` (iOS).
+
+### Parâmetros obrigatórios
+
+| Parâmetro | Onde pegar |
+|---|---|
+| ID da empresa (`companyId`) | painel → **Credenciais** |
+| Token mobile (`mobileToken`) | painel → **Credenciais** |
+| Token da empresa (`companyToken`) | painel → **Empresas** (obrigatório a partir da 1.5.0) |
+
+### Opções
+
 | Opção | Padrão | Para que serve |
 |---|---|---|
 | `recognitionThreshold` | `0.85` | distância máxima para reconhecer (menor = mais rigoroso) |
 | `confirmationFrames` | `2` | quadros seguidos com a mesma pessoa para confirmar |
 | `minMargin` | `0.1` | diferença mínima entre a 1ª e a 2ª pessoa mais parecidas (0 desliga) |
 | `ambiguousTimeoutMs` | `3000` | tempo pedindo uma leitura melhor antes de desistir |
-| `liveness` | desligada | prova de vida |
-| `livenessChallenges` | `3` | quantas ações sortear na prova de vida (1 a 6) |
+| `analyzeIntervalMs` | `700` | intervalo entre as análises dos quadros da câmera |
+| `liveness` | `NONE` | prova de vida: `NONE` (desligada) ou `ACTIVE` (pede ações) |
+| `livenessActions` | todas | quais ações podem ser sorteadas na prova de vida (veja abaixo) |
+| `livenessChallenges` | `3` | quantas ações sortear (1 a 6); com 2 ou mais, uma é sempre piscar ou sorrir |
 | `livenessTimeoutMs` | `20000` | tempo total da prova de vida |
 | `actionTimeoutMs` | `3000` | tempo para fazer cada ação |
-| `rejectWrongAction` | ligado | reprova quem faz outra ação no lugar da pedida |
-| `audit` | desligada | auditoria dos reconhecimentos |
+| `rejectWrongAction` | ligado | reprova quem faz outra ação no lugar da pedida (piscar e sorrir sem pedido não reprovam) |
+| `audit` | desligada | envia ao servidor a foto de cada novo reconhecimento |
+| `serverUrl` | `https://cloud.aifacial.com.br` | endereço do servidor (só para testes) |
+
+### Ações da prova de vida
+
+| Android | iOS | Instrução para a pessoa |
+|---|---|---|
+| `TURN_LEFT` | `.turnLeft` | vire o rosto para a esquerda (esquerda da pessoa) |
+| `TURN_RIGHT` | `.turnRight` | vire o rosto para a direita (direita da pessoa) |
+| `LOOK_UP` | `.lookUp` | olhe para cima |
+| `LOOK_DOWN` | `.lookDown` | olhe para baixo |
+| `BLINK` | `.blink` | pisque os olhos |
+| `SMILE` | `.smile` | sorria (vem seguido de "pare de sorrir") |
+| `MOVE_CLOSER` | `.moveCloser` | aproxime o rosto da câmera |
+| `MOVE_AWAY` | `.moveAway` | afaste o rosto da câmera |
+
+Duas etapas são automáticas e não entram em `livenessActions`:
+
+| Android | iOS | Quando aparece |
+|---|---|---|
+| `STOP_SMILING` | `.stopSmiling` | "pare de sorrir": sempre logo depois de sorrir (conta como ação) |
+| `LOOK_STRAIGHT` | `.lookStraight` | "olhe para a câmera": sempre a última, para reconhecer a pessoa de frente (não conta) |
+
+Quando a prova de vida falha (`LIVENESS_FAILED`), o motivo vem em `getFailReason()` (Android) ou
+`failReason` (iOS), por exemplo `ACTION_TIMEOUT` (não fez a ação no tempo) ou `WRONG_ACTION`
+(fez outra ação).
+
+> Piscar e sorrir barram fotos, mas são fáceis de imitar com um vídeo gravado. Para dificultar o uso
+> de vídeo, mantenha também ações de movimento da cabeça (virar, olhar para cima ou para baixo).
+
+### Exemplo com todas as opções
+
+Android:
+
+```java
+AIFacial.init(context, new AIFacialConfig.Builder("ID_DA_EMPRESA", "TOKEN_MOBILE", "TOKEN_DA_EMPRESA")
+        .recognitionThreshold(0.85f)
+        .confirmationFrames(2)
+        .minMargin(0.1f)
+        .ambiguousTimeoutMs(3000)
+        .analyzeIntervalMs(700)
+        .liveness(LivenessMode.ACTIVE)
+        .livenessActions(
+                LivenessChallenge.TURN_LEFT,     // vire o rosto para a esquerda
+                LivenessChallenge.TURN_RIGHT,    // vire o rosto para a direita
+                LivenessChallenge.LOOK_UP,       // olhe para cima
+                LivenessChallenge.LOOK_DOWN,     // olhe para baixo
+                LivenessChallenge.BLINK,         // pisque os olhos
+                LivenessChallenge.SMILE,         // sorria (vem seguido de "pare de sorrir")
+                LivenessChallenge.MOVE_CLOSER,   // aproxime o rosto da câmera
+                LivenessChallenge.MOVE_AWAY)     // afaste o rosto da câmera
+        .livenessChallenges(3)
+        .livenessTimeoutMs(20000)
+        .actionTimeoutMs(3000)
+        .rejectWrongAction(true)
+        .audit(true)
+        .build());
+```
+
+iOS:
+
+```swift
+let config = AIFacialConfig(companyId: "ID_DA_EMPRESA", mobileToken: "TOKEN_MOBILE",
+                            companyToken: "TOKEN_DA_EMPRESA")
+    .recognitionThreshold(0.85)
+    .confirmationFrames(2)
+    .minMargin(0.1)
+    .ambiguousTimeoutMs(3000)
+    .analyzeIntervalMs(700)
+    .liveness(.active)
+    .livenessActions([
+        .turnLeft,     // vire o rosto para a esquerda
+        .turnRight,    // vire o rosto para a direita
+        .lookUp,       // olhe para cima
+        .lookDown,     // olhe para baixo
+        .blink,        // pisque os olhos
+        .smile,        // sorria (vem seguido de "pare de sorrir")
+        .moveCloser,   // aproxime o rosto da câmera
+        .moveAway      // afaste o rosto da câmera
+    ])
+    .livenessChallenges(3)
+    .livenessTimeoutMs(20000)
+    .actionTimeoutMs(3000)
+    .rejectWrongAction(true)
+    .audit(true)
+AIFacial.initialize(config)
+```
 
 ---
 
